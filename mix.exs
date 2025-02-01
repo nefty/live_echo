@@ -52,7 +52,8 @@ defmodule LiveEcho.MixProject do
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.1.1"},
       {:bandit, "~> 1.5"},
-      {:membrane_webrtc_plugin, "~> 0.23.2"}
+      {:membrane_webrtc_plugin, "~> 0.23.2"},
+      {:membrane_opus_plugin, "~> 0.20.5"}
     ]
   end
 

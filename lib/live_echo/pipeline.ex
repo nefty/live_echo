@@ -39,13 +39,14 @@ defmodule LiveEcho.Pipeline do
 
     if state.audio_track && state.video_track do
       spec = [
-        child(:sink, %Membrane.WebRTC.Sink{
+        child(:sink, %WebRTC.Sink{
           signaling: state.sink_channel,
           video_codec: :vp8,
           tracks: [:audio, :video]
         }),
         get_child(:source)
         |> via_out(Pad.ref(:output, state.audio_track))
+        |> child(:parser, %Membrane.Opus.Parser{delimitation: :undelimit})
         |> via_in(Pad.ref(:input, :audio_track), options: [kind: :audio])
         |> get_child(:sink),
         get_child(:source)

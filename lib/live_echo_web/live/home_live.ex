@@ -194,7 +194,7 @@ defmodule LiveEchoWeb.HomeLive do
             <video id="lex-local-preview" class="w-full h-full" autoplay muted></video>
           </div>
           <div class="bg-black rounded-lg overflow-hidden">
-            <video id="lex-remote-preview" class="w-full h-full" autoplay></video>
+            <video id="lex-remote-player" class="w-full h-full" autoplay></video>
           </div>
         </div>
 

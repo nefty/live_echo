@@ -6,7 +6,7 @@ export function createEchoHook(iceServers = []) {
 
       // Initialize elements
       view.localPreview = document.getElementById("lex-local-preview");
-      view.remotePreview = document.getElementById("lex-remote-preview");
+      view.remotePlayer = document.getElementById("lex-remote-player");
 
       view.button = document.getElementById("lex-button");
       view.audioDevices = document.getElementById("lex-audio-devices");
@@ -221,7 +221,7 @@ export function createEchoHook(iceServers = []) {
     async startStreaming(view) {
       view.disableControls(view);
 
-      view.remotePreview.srcObject = new MediaStream();
+      view.remotePlayer.srcObject = new MediaStream();
 
       view.sourcePc = new RTCPeerConnection(iceServers);
       view.sinkPc = new RTCPeerConnection(iceServers);
@@ -235,11 +235,7 @@ export function createEchoHook(iceServers = []) {
       };
 
       // Handle sink connection state changes
-      view.sinkPc.ontrack = (ev) => {
-        if (view.sinkPc.connectionState === "connected") {
-          view.remotePreview.srcObject.addTrack(ev.track);
-        }
-      };
+      view.sinkPc.ontrack = (ev) => view.remotePlayer.srcObject.addTrack(ev.track);
 
       // ICE candidate handling for source
       view.sourcePc.onicecandidate = (ev) => {
@@ -257,7 +253,9 @@ export function createEchoHook(iceServers = []) {
         await view.sinkPc.addIceCandidate(ev.data);
       };
 
-      for (const track of view.localStream.getTracks()) { view.sourcePc.addTransceiver(track, { 'direction': 'sendonly' }) }
+      // for (const track of view.localStream.getTracks()) { view.sourcePc.addTransceiver(track, { 'direction': 'sendonly' }) }
+      view.sourcePc.addTrack(view.localStream.getAudioTracks()[0], view.localStream);
+      view.sourcePc.addTrack(view.localStream.getVideoTracks()[0], view.localStream);
 
       view.sinkPc.addTransceiver("audio", { direction: "recvonly" });
       view.sinkPc.addTransceiver("video", { direction: "recvonly" });
