@@ -21,15 +21,15 @@ defmodule LiveEchoWeb.HomeLive do
   end
 
   @impl true
-  def handle_event("start-stream", _params, socket) do
+  def handle_event("start_streaming", _params, socket) do
     Logger.info("Starting stream")
-    {:noreply, socket |> assign(streaming?: true) |> push_event("start_stream", %{})}
+    {:noreply, socket |> assign(streaming?: true) |> push_event("start_streaming", %{})}
   end
 
   @impl true
-  def handle_event("stop-stream", _params, socket) do
+  def handle_event("stop_streaming", _params, socket) do
     Logger.info("Stopping stream")
-    {:noreply, socket |> assign(streaming?: false) |> push_event("stop_stream", %{})}
+    {:noreply, socket |> assign(streaming?: false) |> push_event("stop_streaming", %{})}
   end
 
   @impl true
@@ -55,7 +55,7 @@ defmodule LiveEchoWeb.HomeLive do
   def terminate(reason, socket) do
     Logger.info("LiveView terminating: #{inspect(reason)}")
 
-    if socket.assigns[:pipeline] do
+    if socket.assigns.pipeline do
       Membrane.Pipeline.terminate(socket.assigns.pipeline)
     end
   end
@@ -150,10 +150,10 @@ defmodule LiveEchoWeb.HomeLive do
         </details>
 
         <div class="grid grid-cols-2 gap-4 mt-4">
-          <div class="aspect-video bg-black rounded-lg overflow-hidden">
+          <div class="bg-black rounded-lg overflow-hidden">
             <video id="lex-local-preview" class="w-full h-full" autoplay muted></video>
           </div>
-          <div class="aspect-video bg-black rounded-lg overflow-hidden">
+          <div class="bg-black rounded-lg overflow-hidden">
             <video id="lex-remote-preview" class="w-full h-full" autoplay></video>
           </div>
         </div>
@@ -162,18 +162,18 @@ defmodule LiveEchoWeb.HomeLive do
           <button
             id="lex-button"
             class="rounded-lg w-full px-2.5 py-2.5 bg-brand/100 disabled:bg-brand/50 hover:bg-brand/90 text-white font-bold"
-            phx-click="stop-stream"
+            phx-click="stop_streaming"
           >
-            Stop Stream
+            Stop Streaming
           </button>
         </div>
         <div :if={!@streaming?} class="py-2.5">
           <button
             id="lex-button"
             class="rounded-lg w-full px-2.5 py-2.5 bg-brand/100 disabled:bg-brand/50 hover:bg-brand/90 text-white font-bold"
-            phx-click="start-stream"
+            phx-click="start_streaming"
           >
-            Start Stream
+            Start Streaming
           </button>
         </div>
       </div>
