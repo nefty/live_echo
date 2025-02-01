@@ -1,4 +1,4 @@
-export function createPublisherHook(iceServers = []) {
+export function createEchoHook(iceServers = []) {
   return {
     async mounted() {
       console.log("Echo hook mounted!");
@@ -34,6 +34,7 @@ export function createPublisherHook(iceServers = []) {
 
       // Initialize separate peer connections
       view.sourcePc = null;  // For sending media to server
+      view.sinkPc = null;    // For receiving media from server
 
       view.audioDevices.onchange = function () {
         view.setupStream(view);
@@ -62,23 +63,50 @@ export function createPublisherHook(iceServers = []) {
         view.stopStreaming(view);
       });
 
-      // Handle WebRTC events from server
-      this.handleEvent("webrtc_event", async (msg) => {
-        console.log("Received WebRTC event from server:", msg);
+      // Handle WebRTC events from server for source connection
+      this.handleEvent("source_webrtc_event", async (msg) => {
+        console.log("Received source WebRTC event from server:", msg);
 
         if (msg.type === "sdp_answer") {
           try {
             await view.sourcePc.setRemoteDescription(msg.data);
-            console.log("Successfully set remote description");
+            console.log("Successfully set source remote description");
           } catch (error) {
-            console.error("Error setting remote description:", error);
+            console.error("Error setting source remote description:", error);
           }
         } else if (msg.type === "ice_candidate") {
           try {
             await view.sourcePc.addIceCandidate(msg.data);
-            console.log("Successfully added ICE candidate");
+            console.log("Successfully added source ICE candidate");
           } catch (error) {
-            console.error("Error adding ICE candidate:", error);
+            console.error("Error adding source ICE candidate:", error);
+          }
+        }
+      });
+
+      // Handle WebRTC events from server for sink connection
+      this.handleEvent("sink_webrtc_event", async (msg) => {
+        console.log("Received sink WebRTC event from server:", msg);
+
+        if (msg.type === "sdp_offer") {
+          try {
+            await view.sinkPc.setRemoteDescription(msg.data);
+            const answer = await view.sinkPc.createAnswer();
+            await view.sinkPc.setLocalDescription(answer);
+            view.pushEvent("sink_webrtc_event", {
+              type: "sdp_answer",
+              data: answer
+            });
+            console.log("Sent SDP answer:", answer)
+          } catch (error) {
+            console.error("Error setting sink remote description:", error);
+          }
+        } else if (msg.type === "ice_candidate") {
+          try {
+            await view.sinkPc.addIceCandidate(msg.data);
+            console.log("Successfully added sink ICE candidate");
+          } catch (error) {
+            console.error("Error adding sink ICE candidate:", error);
           }
         }
       });
@@ -193,46 +221,65 @@ export function createPublisherHook(iceServers = []) {
     async startStreaming(view) {
       view.disableControls(view);
 
+      view.remotePreview.srcObject = new MediaStream();
+
       view.sourcePc = new RTCPeerConnection(iceServers);
+      view.sinkPc = new RTCPeerConnection(iceServers);
 
       // Handle source connection state changes
       view.sourcePc.onconnectionstatechange = () => {
         console.log("Source connection state:", view.sourcePc.connectionState);
-        if (view.sourcePc.connectionState === "connected") {
-        } else if (view.sourcePc.connectionState === "failed") {
+        if (view.sourcePc.connectionState === "failed") {
           view.stopStreaming(view);
         }
       };
 
-      // Handle ICE candidates for source
+      // Handle sink connection state changes
+      view.sinkPc.ontrack = (ev) => {
+        if (view.sinkPc.connectionState === "connected") {
+          view.remotePreview.srcObject.addTrack(ev.track);
+        }
+      };
+
+      // ICE candidate handling for source
       view.sourcePc.onicecandidate = (ev) => {
         if (ev.candidate) {
-          view.pushEvent("webrtc_event", {
+          view.pushEvent("source_webrtc_event", {
             type: "ice_candidate",
             data: ev.candidate
           });
         }
       };
 
+      // ICE candidate handling for sink
+      view.sinkPc.onicecandidate = async (ev) => {
+        console.log("Recieved ICE candidate:", ev);
+        await view.sinkPc.addIceCandidate(ev.data);
+      };
+
       for (const track of view.localStream.getTracks()) { view.sourcePc.addTransceiver(track, { 'direction': 'sendonly' }) }
 
+      view.sinkPc.addTransceiver("audio", { direction: "recvonly" });
+      view.sinkPc.addTransceiver("video", { direction: "recvonly" });
+
       // Create and send offer from source
-      try {
-        const offer = await view.sourcePc.createOffer();
-        await view.sourcePc.setLocalDescription(offer);
-        view.pushEvent("webrtc_event", {
-          type: "sdp_offer",
-          data: offer
-        });
-      } catch (error) {
-        console.error("Error creating offer:", error);
-      }
+      const sourceOffer = await view.sourcePc.createOffer();
+      await view.sourcePc.setLocalDescription(sourceOffer);
+      view.pushEvent("source_webrtc_event", {
+        type: "sdp_offer",
+        data: sourceOffer
+      });
     },
 
     stopStreaming(view) {
       if (view.sourcePc) {
         view.sourcePc.close();
         view.sourcePc = undefined;
+      }
+
+      if (view.sinkPc) {
+        view.sinkPc.close();
+        view.sinkPc = undefined;
       }
 
       view.enableControls(view);

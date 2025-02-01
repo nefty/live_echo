@@ -12,27 +12,61 @@ defmodule LiveEcho.Pipeline do
   # Callbacks
 
   @impl true
-  def handle_init(_ctx, %{channel: channel}) do
-    timestamp = DateTime.utc_now() |> Calendar.strftime("%Y%m%d_%H%M%S")
+  def handle_init(_ctx, %{source_channel: source_channel, sink_channel: sink_channel}) do
+    Logger.info("Initializing Membrane pipeline")
+
     spec =
       [
-        child(:webrtc, %WebRTC.Source{
-          signaling: channel,
-          sdp_candidates_timeout: Membrane.Time.seconds(3)
-        }),
-        child(:matroska, Membrane.Matroska.Muxer),
-        get_child(:webrtc)
-        |> via_out(:output, options: [kind: :audio])
-        |> child(Membrane.Opus.Parser)
-        |> get_child(:matroska),
-        get_child(:webrtc)
-        |> via_out(:output, options: [kind: :video])
-        |> get_child(:matroska),
-        get_child(:matroska)
-        |> child(:sink, %Membrane.File.Sink{location: "recording_#{timestamp}.mkv"})
+        child(:source, %WebRTC.Source{
+          signaling: source_channel,
+          allowed_video_codecs: :vp8,
+          keyframe_interval: Membrane.Time.seconds(2)
+        })
       ]
 
-    {[spec: spec], %{}}
+    {[spec: spec], %{source_channel: source_channel, sink_channel: sink_channel, audio_track: nil, video_track: nil}}
+  end
+
+  @impl true
+  def handle_child_notification({:new_tracks, tracks}, :source, _ctx, state) do
+    state =
+      Enum.reduce(tracks, state, fn %ExWebRTC.MediaStreamTrack{} = track, acc ->
+        case track.kind do
+          :audio -> %{acc | audio_track: track.id}
+          :video -> %{acc | video_track: track.id}
+        end
+      end)
+
+    if state.audio_track && state.video_track do
+      spec = [
+        child(:sink, %Membrane.WebRTC.Sink{
+          signaling: state.sink_channel,
+          video_codec: :vp8,
+          tracks: [:audio, :video]
+        }),
+        get_child(:source)
+        |> via_out(Pad.ref(:output, state.audio_track))
+        |> via_in(Pad.ref(:input, :audio_track), options: [kind: :audio])
+        |> get_child(:sink),
+        get_child(:source)
+        |> via_out(Pad.ref(:output, state.video_track))
+        |> via_in(Pad.ref(:input, :video_track), options: [kind: :video])
+        |> get_child(:sink)
+      ]
+
+      {[spec: spec], state}
+    else
+      {[], state}
+    end
+  end
+
+  @impl true
+  def handle_child_notification(notification, child, _ctx, state) do
+    Logger.info(
+      "Unhandled child notification: #{inspect(notification)} for child: #{inspect(child)}"
+    )
+
+    {[], state}
   end
 
   @impl true

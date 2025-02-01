@@ -6,15 +6,25 @@ defmodule LiveEchoWeb.HomeLive do
   alias LiveEcho.Pipeline
   alias Membrane.WebRTC.SignalingChannel
 
+  @impl true
   def mount(_params, _session, socket) do
     Logger.info("Mounting LiveEcho")
-    channel = SignalingChannel.new()
-    :ok = SignalingChannel.register_peer(channel, message_format: :json_data, pid: self())
-    {:ok, _sup, pid} = Pipeline.start_link(%{channel: channel})
+    source_channel = SignalingChannel.new()
+    sink_channel = SignalingChannel.new()
+
+    :ok = SignalingChannel.register_peer(source_channel, message_format: :json_data, pid: self())
+    :ok = SignalingChannel.register_peer(sink_channel, message_format: :json_data, pid: self())
+
+    {:ok, _sup, pid} =
+      Pipeline.start_link(%{
+        source_channel: source_channel,
+        sink_channel: sink_channel
+      })
 
     {:ok,
      assign(socket,
-       channel: channel,
+       source_channel: source_channel,
+       sink_channel: sink_channel,
        pipeline: pid,
        streaming?: false
      )}
@@ -33,10 +43,27 @@ defmodule LiveEchoWeb.HomeLive do
   end
 
   @impl true
-  def handle_event("webrtc_event", params, socket) do
-    Logger.info("Received WebRTC event from client: #{inspect(params)}")
+  def handle_event("source_webrtc_event", params, socket) do
+    Logger.info("Received source WebRTC event from client: #{inspect(params)}")
 
-    SignalingChannel.signal(socket.assigns.channel, params)
+    if socket.assigns.source_channel do
+      SignalingChannel.signal(socket.assigns.source_channel, params)
+    else
+      Logger.info("Ignoring source WebRTC event - no active channel")
+    end
+
+    {:noreply, socket}
+  end
+
+  @impl true
+  def handle_event("sink_webrtc_event", params, socket) do
+    Logger.info("Received sink WebRTC event from client: #{inspect(params)}")
+
+    if socket.assigns.sink_channel do
+      SignalingChannel.signal(socket.assigns.sink_channel, params)
+    else
+      Logger.info("Ignoring sink WebRTC event - no active channel")
+    end
 
     {:noreply, socket}
   end
@@ -46,9 +73,21 @@ defmodule LiveEchoWeb.HomeLive do
         {Membrane.WebRTC.SignalingChannel, pid, message, _context},
         socket
       ) do
-    Logger.info("Received Membrane message: #{inspect(message)}")
+    Logger.info("Received Membrane message from #{inspect(pid)}: #{inspect(message)}")
 
-    {:noreply, push_event(socket, "webrtc_event", message)}
+    event_name = cond do
+      pid == socket.assigns.source_channel.pid -> "source_webrtc_event"
+      pid == socket.assigns.sink_channel.pid -> "sink_webrtc_event"
+      true ->
+        Logger.warning("Received message from unknown channel: #{inspect(pid)}")
+        nil
+    end
+
+    if event_name do
+      {:noreply, push_event(socket, event_name, message)}
+    else
+      {:noreply, socket}
+    end
   end
 
   @impl true
@@ -60,9 +99,10 @@ defmodule LiveEchoWeb.HomeLive do
     end
   end
 
+  @impl true
   def render(assigns) do
     ~H"""
-    <div id="publisher" phx-hook="Publisher" class="h-full w-full flex justify-between gap-6">
+    <div id="echo" phx-hook="Echo" class="h-full w-full flex justify-between gap-6">
       <div class="w-full flex flex-col">
         <details>
           <summary class="font-bold text-[#0d0d0d] py-2.5">Devices</summary>
