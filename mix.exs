@@ -32,7 +32,7 @@ defmodule LiveEcho.MixProject do
   # Type `mix help deps` for examples and options.
   defp deps do
     [
-      {:phoenix, "~> 1.7.18"},
+      {:phoenix, "~> 1.7.19"},
       {:phoenix_html, "~> 4.1"},
       {:phoenix_live_reload, "~> 1.2", only: :dev},
       {:phoenix_live_view, "~> 1.0.0"},
