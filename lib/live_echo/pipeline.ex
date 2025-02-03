@@ -24,7 +24,13 @@ defmodule LiveEcho.Pipeline do
         })
       ]
 
-    {[spec: spec], %{source_channel: source_channel, sink_channel: sink_channel, audio_track: nil, video_track: nil}}
+    {[spec: spec],
+     %{
+       source_channel: source_channel,
+       sink_channel: sink_channel,
+       audio_track: nil,
+       video_track: nil
+     }}
   end
 
   @impl true
@@ -62,6 +68,18 @@ defmodule LiveEcho.Pipeline do
   end
 
   @impl true
+  def handle_child_notification({:end_of_stream, :video_track}, :sink, _ctx, state) do
+    Logger.info("Pipeline: End of video stream")
+    {[terminate: :normal], state}
+  end
+
+  @impl true
+  def handle_child_notification({:end_of_stream, :audio_track}, :sink, _ctx, state) do
+    Logger.info("Pipeline: End of audio stream")
+    {[terminate: :normal], state}
+  end
+
+  @impl true
   def handle_child_notification(notification, child, _ctx, state) do
     Logger.info(
       "Unhandled child notification: #{inspect(notification)} for child: #{inspect(child)}"
@@ -74,16 +92,5 @@ defmodule LiveEcho.Pipeline do
   def handle_terminate_request(_ctx, state) do
     Logger.info("Pipeline: Terminating")
     {[terminate: :normal], state}
-  end
-
-  @impl true
-  def handle_element_end_of_stream(:sink, :input, _ctx, state) do
-    Logger.info("Pipeline: End of stream")
-    {[terminate: :normal], state}
-  end
-
-  @impl true
-  def handle_element_end_of_stream(_element, _pad, _ctx, state) do
-    {[], state}
   end
 end

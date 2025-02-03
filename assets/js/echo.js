@@ -115,9 +115,7 @@ export function createEchoHook(iceServers = []) {
       try {
         await view.findDevices(view);
         await view.setupStream(view);
-        view.button.disabled = false;
-        view.audioApplyButton.disabled = false;
-        view.videoApplyButton.disabled = false;
+        view.enableControls(view);
       } catch (error) {
         console.error("Initial setup failed:", error);
         view.button.disabled = true;
@@ -198,24 +196,28 @@ export function createEchoHook(iceServers = []) {
         `Setting up stream: audioDevice: ${audioDevice}, videoDevice: ${videoDevice}`
       );
 
-      view.localStream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          deviceId: { exact: videoDevice },
-          width: view.width.value,
-          height: view.height.value,
-          frameRate: view.fps.value,
-        },
-        audio: {
-          deviceId: { exact: audioDevice },
-          echoCancellation: view.echoCancellation.checked,
-          autoGainControl: view.autoGainControl.checked,
-          noiseSuppression: view.noiseSuppression.checked,
-        },
-      });
+      try {
+        view.localStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            deviceId: { exact: videoDevice },
+            width: parseInt(view.width.value),
+            height: parseInt(view.height.value),
+            frameRate: parseInt(view.fps.value),
+          },
+          audio: {
+            deviceId: { exact: audioDevice },
+            echoCancellation: view.echoCancellation.checked,
+            autoGainControl: view.autoGainControl.checked,
+            noiseSuppression: view.noiseSuppression.checked,
+          },
+        });
 
-      console.log(`Obtained stream with id: ${view.localStream.id}`);
-
-      view.localPreview.srcObject = view.localStream;
+        console.log(`Obtained stream with id: ${view.localStream.id}`);
+        view.localPreview.srcObject = view.localStream;
+      } catch (error) {
+        console.error("Error setting up stream:", error);
+        throw error;
+      }
     },
 
     async startStreaming(view) {
@@ -253,7 +255,6 @@ export function createEchoHook(iceServers = []) {
         await view.sinkPc.addIceCandidate(ev.data);
       };
 
-      // for (const track of view.localStream.getTracks()) { view.sourcePc.addTransceiver(track, { 'direction': 'sendonly' }) }
       view.sourcePc.addTrack(view.localStream.getAudioTracks()[0], view.localStream);
       view.sourcePc.addTrack(view.localStream.getVideoTracks()[0], view.localStream);
 
@@ -280,6 +281,7 @@ export function createEchoHook(iceServers = []) {
         view.sinkPc = undefined;
       }
 
+      view.findDevices(view)
       view.enableControls(view);
     },
   };

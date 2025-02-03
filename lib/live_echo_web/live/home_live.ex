@@ -39,7 +39,27 @@ defmodule LiveEchoWeb.HomeLive do
   @impl true
   def handle_event("stop_streaming", _params, socket) do
     Logger.info("Stopping stream")
-    {:noreply, socket |> assign(streaming?: false) |> push_event("stop_streaming", %{})}
+
+    SignalingChannel.close(socket.assigns.source_channel)
+    SignalingChannel.close(socket.assigns.sink_channel)
+
+    source_channel = SignalingChannel.new()
+    sink_channel = SignalingChannel.new()
+
+    :ok = SignalingChannel.register_peer(source_channel, message_format: :json_data, pid: self())
+    :ok = SignalingChannel.register_peer(sink_channel, message_format: :json_data, pid: self())
+
+    {:ok, _sup, pid} =
+      Pipeline.start_link(%{
+        source_channel: source_channel,
+        sink_channel: sink_channel
+      })
+
+    {:noreply,
+     socket |> assign(pipeline: pid,
+     source_channel: source_channel,
+     sink_channel: sink_channel,
+     streaming?: false) |> push_event("stop_streaming", %{})}
   end
 
   @impl true
@@ -75,13 +95,18 @@ defmodule LiveEchoWeb.HomeLive do
       ) do
     Logger.info("Received Membrane message from #{inspect(pid)}: #{inspect(message)}")
 
-    event_name = cond do
-      pid == socket.assigns.source_channel.pid -> "source_webrtc_event"
-      pid == socket.assigns.sink_channel.pid -> "sink_webrtc_event"
-      true ->
-        Logger.warning("Received message from unknown channel: #{inspect(pid)}")
-        nil
-    end
+    event_name =
+      cond do
+        pid == socket.assigns.source_channel.pid ->
+          "source_webrtc_event"
+
+        pid == socket.assigns.sink_channel.pid ->
+          "sink_webrtc_event"
+
+        true ->
+          Logger.warning("Received message from unknown channel: #{inspect(pid)}")
+          nil
+      end
 
     if event_name do
       {:noreply, push_event(socket, event_name, message)}
